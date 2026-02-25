@@ -1,11 +1,9 @@
 /**
  * Github에 풀 리퀘스트 생성하여 문제 풀이 코드 업로드
+ * - 기존 PR이 있으면 커밋 추가 + PR body append
+ * - 동일 코드가 이미 PR에 있으면 스킵
+ * - 다른 코드면 넘버링된 파일명으로 업로드
  * @param {object} bojData - 문제 풀이와 관련된 데이터 객체
- * @param {string} bojData.code - 소스 코드
- * @param {string} bojData.directory - 파일이 저장될 Git 저장소 내의 경로
- * @param {string} bojData.fileName - 파일명
- * @param {string} bojData.message - 커밋 메시지
- * @param {string} bojData.prBody - Pull Request 본문에 들어갈 내용
  * @param {function} cb - 업로드 완료 후 실행될 콜백 함수
  */
 async function uploadOneSolveProblemOnGit(bojData, cb) {
@@ -15,76 +13,209 @@ async function uploadOneSolveProblemOnGit(bojData, cb) {
     console.error('token or hook is null', token, hook);
     return;
   }
-  
-  // 새로운 브랜치 생성
-  const { newBranchName } = await createBranchAndCommit(hook, token, bojData.code, bojData.directory, bojData.fileName, bojData.message);
-    
-  if (newBranchName) {
-    // 생성된 브랜치 기반으로 PR 생성
-    const pullRequest = await createPullRequestFromBranch(hook, token, bojData.prBody, bojData.message, newBranchName);
-    console.log(`Pull Request가 성공적으로 생성되었습니다: ${pullRequest.html_url}`);
-    
-    if (typeof cb === 'function') {
-      cb(pullRequest.html_url);
-    }
-  }
-}
 
-/**
- * Github api를 사용하여 업로드
- * @see https://docs.github.com/en/rest/reference/repos#create-or-update-file-contents
- * @param {string} token - github api 토큰
- * @param {string} hook - github api hook
- * @param {string} sourceText - 업로드할 소스코드 내용
- * @param {string} readmeText - 업로드할 README 내용
- * @param {string} directory - 업로드될 파일의 경로
- * @param {string} filename - 업로드할 파일명
- * @param {string} commitMessage - 커밋 메시지 (예: "[OCT/플랫폼] 1000 Helloworld")
- * @param {function} cb - 콜백 함수 (ex. 업로드 후 로딩 아이콘 처리 등)
- */
-async function createBranchAndCommit(hook, token, sourceText, directory, filename, commitMessage) {
   const git = new GitHub(hook, token);
   const stats = await getStats();
   let baseBranch = stats.branches[hook] || await git.getDefaultBranchOnRepo();
   stats.branches[hook] = baseBranch;
-  
-  // 베이스 브랜치의 최신 '커밋' SHA와 '트리' SHA 가져옴
-  const { refSHA: baseBranchSHA } = await git.getReference(baseBranch);
-  const { treeSHA: baseTreeSHA } = await git.getCommit(baseBranchSHA);
 
   // 커밋 메시지에서 플랫폼 정보 추출
-  const platform = commitMessage.substring(commitMessage.indexOf('/') + 1, commitMessage.indexOf(']'));
-  
-  // 새 브랜치 생성
-  const newBranchName = `${platform}/problem-${filename.replace(/[^0-9]/g, '')}`;
-  const newBranchRef = `refs/heads/${newBranchName}`;
-  await git.createReference(newBranchRef, baseBranchSHA);
+  const platform = bojData.message.substring(bojData.message.indexOf('/') + 1, bojData.message.indexOf(']'));
+  const branchName = `${platform}/problem-${bojData.fileName.replace(/[^0-9]/g, '')}`;
 
-  // 파일 Blob 생성 및 새 Tree 생성
-  const source = await git.createBlob(sourceText, `${directory}/${filename}`);
-  const newTreeSHA = await git.createTree(baseTreeSHA, [source]);
+  // 기존 열린 PR 확인
+  const owner = hook.split('/')[0];
+  const existingPR = await findExistingPR(git, owner, branchName);
 
-  // 새 커밋 생성 및 브랜치 Head 업데이트
-  const commitSHA = await git.createCommit(commitMessage, newTreeSHA, baseBranchSHA);
-  await git.updateHead(newBranchRef, commitSHA);
-
-  console.log(`성공: '${newBranchName}' 브랜치에 커밋이 완료되었습니다.`);
-  return { newBranchName };
+  if (existingPR) {
+    // 기존 PR이 있는 경우: 중복 체크 후 커밋 추가
+    await handleExistingPR(git, hook, token, existingPR, branchName, bojData, cb);
+  } else {
+    // 기존 PR이 없는 경우: 새 브랜치 + 새 PR 생성 (기존 로직)
+    await handleNewPR(git, hook, token, baseBranch, branchName, bojData, cb);
+  }
 }
 
 /**
- * 브랜치 기반으로 Pull Request 생성
- * @param {string} newBranchName - PR을 보낼 브랜치 이름 (e.g., "플랫폼/problem-1001")
- * @returns {Promise<object>} 생성된 Pull Request 객체
+ * 해당 브랜치에 열린 PR이 있는지 확인
+ * @returns {object|null} 기존 PR 객체 또는 null
  */
-async function createPullRequestFromBranch(hook, token, prBody, commitMessage, newBranchName) {
-  const git = new GitHub(hook, token);
+async function findExistingPR(git, owner, branchName) {
+  try {
+    const prs = await git.listPullRequests('open', `${owner}:${branchName}`);
+    if (Array.isArray(prs) && prs.length > 0) {
+      console.log(`기존 PR을 발견했습니다: #${prs[0].number} - ${prs[0].title}`);
+      return prs[0];
+    }
+  } catch (e) {
+    console.log('기존 PR 조회 중 에러 (무시하고 새 PR 생성):', e);
+  }
+  return null;
+}
+
+/**
+ * 기존 PR이 있는 경우: 중복 체크 → 커밋 추가 → PR body append
+ */
+async function handleExistingPR(git, hook, token, existingPR, branchName, bojData, cb) {
+  const branchRef = `refs/heads/${branchName}`;
+
+  // 1. 기존 브랜치의 HEAD SHA와 트리 SHA 가져오기
+  const { refSHA: branchHeadSHA } = await git.getReference(branchName);
+  const { treeSHA: branchTreeSHA } = await git.getCommit(branchHeadSHA);
+
+  // 2. 기존 트리에서 같은 디렉토리의 파일 목록 가져오기
+  const treeItems = await git.getTreeRecursive(branchTreeSHA);
+  const existingFilesInDir = treeItems.filter(item =>
+    item.path.startsWith(bojData.directory + '/') && item.type === 'blob'
+  );
+
+  // 3. 새 코드의 Blob SHA 계산 (GitHub 방식)
+  const newCodeSHA = calculateBlobSHA(bojData.code);
+
+  // 4. 기존 파일들과 SHA 비교 → 동일 코드 감지
+  const isDuplicate = existingFilesInDir.some(file => file.sha === newCodeSHA);
+  if (isDuplicate) {
+    console.log('기존 PR에 이미 동일한 코드가 존재합니다. 업로드를 스킵합니다.');
+    Toast.raiseToast('이미 동일한 코드가 PR에 존재합니다.');
+    if (typeof cb === 'function') {
+      cb(existingPR.html_url);
+    }
+    return;
+  }
+
+  // 5. 파일명 넘버링: 기존 파일들을 확인하여 다음 번호 결정
+  const numberedFileName = getNextFileName(existingFilesInDir, bojData.directory, bojData.fileName);
+
+  // 6. Java 파일인 경우 클래스명도 넘버링된 파일명과 일치시키기
+  let finalCode = bojData.code;
+  const ext = numberedFileName.split('.').pop();
+  if (ext === 'java' && numberedFileName !== bojData.fileName) {
+    const newClassName = numberedFileName.replace(`.${ext}`, '');
+    finalCode = finalCode.replace(/public\s+class\s+([A-Za-z_][A-Za-z0-9_]*)/, `public class ${newClassName}`);
+  }
+
+  // 7. 기존 브랜치에 새 커밋 추가
+  const source = await git.createBlob(finalCode, `${bojData.directory}/${numberedFileName}`);
+  const newTreeSHA = await git.createTree(branchTreeSHA, [source]);
+  const commitSHA = await git.createCommit(bojData.message, newTreeSHA, branchHeadSHA);
+  await git.updateHead(branchRef, commitSHA);
+
+  console.log(`성공: 기존 브랜치 '${branchName}'에 커밋이 추가되었습니다. (파일: ${numberedFileName})`);
+
+  // 8. PR body에 새 풀이 정보 append
+  const appendBody = makeAppendPRBody(bojData);
+  const updatedBody = existingPR.body + appendBody;
+  await git.updatePullRequest(existingPR.number, updatedBody);
+
+  console.log(`PR #${existingPR.number}의 body가 업데이트되었습니다.`);
+
+  if (typeof cb === 'function') {
+    cb(existingPR.html_url);
+  }
+}
+
+/**
+ * 새 PR 생성 (기존 로직)
+ */
+async function handleNewPR(git, hook, token, baseBranch, branchName, bojData, cb) {
+  const branchRef = `refs/heads/${branchName}`;
+
+  // 베이스 브랜치의 최신 커밋 SHA와 트리 SHA
+  const { refSHA: baseBranchSHA } = await git.getReference(baseBranch);
+  const { treeSHA: baseTreeSHA } = await git.getCommit(baseBranchSHA);
+
+  // 새 브랜치 생성
+  await git.createReference(branchRef, baseBranchSHA);
+
+  // 파일 Blob 생성 및 새 Tree 생성
+  const source = await git.createBlob(bojData.code, `${bojData.directory}/${bojData.fileName}`);
+  const newTreeSHA = await git.createTree(baseTreeSHA, [source]);
+
+  // 새 커밋 생성 및 브랜치 Head 업데이트
+  const commitSHA = await git.createCommit(bojData.message, newTreeSHA, baseBranchSHA);
+  await git.updateHead(branchRef, commitSHA);
+
+  console.log(`성공: '${branchName}' 브랜치에 커밋이 완료되었습니다.`);
+
+  // PR 생성
   const stats = await getStats();
-  const baseBranch = stats.branches[hook];
+  const prTitle = bojData.message;
+  const pullRequest = await git.createPullRequest(prTitle, bojData.prBody, branchName, baseBranch);
+  console.log(`Pull Request가 성공적으로 생성되었습니다: ${pullRequest.html_url}`);
 
-  // PR 제목 생성 => 커밋 메세지를 이미 수정해뒀기 때문에 동일하게 지정
-  const prTitle = commitMessage;
+  if (typeof cb === 'function') {
+    cb(pullRequest.html_url);
+  }
+}
 
-  // PR 생성 API 호출
-  return git.createPullRequest(prTitle, prBody, newBranchName, baseBranch);
+/**
+ * 기존 파일 목록을 확인하여 넘버링된 파일명 생성
+ * @param {Array} existingFiles - 트리에 존재하는 파일 목록
+ * @param {string} directory - 파일 디렉토리
+ * @param {string} baseFileName - 기본 파일명
+ * @returns {string} 사용할 파일명
+ */
+function getNextFileName(existingFiles, directory, baseFileName) {
+  const dotIndex = baseFileName.lastIndexOf('.');
+  const nameWithoutExt = baseFileName.substring(0, dotIndex);
+  const extension = baseFileName.substring(dotIndex);
+
+  const existingNames = existingFiles.map(f => {
+    const parts = f.path.split('/');
+    return parts[parts.length - 1];
+  });
+
+  if (!existingNames.includes(baseFileName)) {
+    return baseFileName;
+  }
+
+  let counter = 2;
+  let candidateName = `${nameWithoutExt}_${counter}${extension}`;
+  while (existingNames.includes(candidateName)) {
+    counter++;
+    candidateName = `${nameWithoutExt}_${counter}${extension}`;
+  }
+
+  return candidateName;
+}
+
+/**
+ * 기존 PR body에 append할 추가 풀이 섹션 생성
+ * @param {object} bojData - 문제 풀이 데이터
+ * @returns {string} append할 PR body 섹션
+ */
+function makeAppendPRBody(bojData) {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const approachMatch = bojData.prBody.match(/## 🤔 접근 방법\s*\n([\s\S]*?)(?=\n\s*##|\s*$)/);
+  const difficultyMatch = bojData.prBody.match(/## 🤯 어려웠던 점\s*\n([\s\S]*?)(?=\n\s*##|\s*$)/);
+  const learnedMatch = bojData.prBody.match(/## 📚 배운 점\s*\n([\s\S]*?)(?=\n\s*##|\s*$)/);
+
+  const approach = approachMatch ? approachMatch[1].trim() : '';
+  const difficulty = difficultyMatch ? difficultyMatch[1].trim() : '';
+  const learned = learnedMatch ? learnedMatch[1].trim() : '';
+
+  const memoryMatch = bojData.prBody.match(/### 메모리\s*\n\s*(.*)/);
+  const runtimeMatch = bojData.prBody.match(/### 시간\s*\n\s*(.*)/);
+  const memory = memoryMatch ? memoryMatch[1].trim() : '';
+  const runtime = runtimeMatch ? runtimeMatch[1].trim() : '';
+
+  return `
+
+  ---
+  ## 📝 추가 풀이 (${dateStr})
+  ### ⏱️ 성능 요약
+  - **메모리:** ${memory}
+  - **시간:** ${runtime}
+
+  ### 🤔 접근 방법
+  ${approach}
+
+  ### 🤯 어려웠던 점
+  ${difficulty}
+
+  ### 📚 배운 점
+  ${learned}
+  `;
 }
