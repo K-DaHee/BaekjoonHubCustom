@@ -56,6 +56,21 @@ class GitHub {
     log('GitHub getCommit', 'sha:', sha);
     return getCommit(this.hook, this.token, sha);
   }
+
+  async listPullRequests(state, head) {
+    log('GitHub listPullRequests', 'state:', state, 'head:', head);
+    return listPullRequests(this.hook, this.token, state, head);
+  }
+
+  async updatePullRequest(pullNumber, body) {
+    log('GitHub updatePullRequest', 'pullNumber:', pullNumber);
+    return updatePullRequest(this.hook, this.token, pullNumber, body);
+  }
+
+  async getTreeRecursive(treeSHA) {
+    log('GitHub getTreeRecursive', 'treeSHA:', treeSHA);
+    return getTreeRecursive(this.hook, this.token, treeSHA);
+  }
   // ===================== [END] 추가할 코드 =====================
 
   async getTree() {
@@ -260,4 +275,58 @@ async function getCommit(hook, token, commit_sha) {
   .then((data) => {
     return { treeSHA: data.tree.sha };
   });
+}
+
+/**
+ * list pull requests for a repository
+ * @see https://docs.github.com/en/rest/pulls/pulls#list-pull-requests
+ * @param {string} hook - the github repository
+ * @param {string} token - the github token
+ * @param {string} state - PR state ('open', 'closed', 'all')
+ * @param {string} head - filter by head branch (format: 'owner:branch')
+ * @return {Promise<Array>} - the promise for the pull request list
+ */
+async function listPullRequests(hook, token, state, head) {
+  const params = new URLSearchParams({ state });
+  if (head) params.append('head', head);
+  return fetch(`https://api.github.com/repos/${hook}/pulls?${params.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+  }).then((res) => res.json());
+}
+
+/**
+ * update a pull request (e.g., update body)
+ * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
+ * @param {string} hook - the github repository
+ * @param {string} token - the github token
+ * @param {number} pullNumber - the pull request number
+ * @param {string} body - the new body content
+ * @return {Promise} - the promise for the updated pull request object
+ */
+async function updatePullRequest(hook, token, pullNumber, body) {
+  return fetch(`https://api.github.com/repos/${hook}/pulls/${pullNumber}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ body }),
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'content-type': 'application/json' },
+  }).then((res) => res.json());
+}
+
+/**
+ * get a tree recursively by tree SHA
+ * @see https://docs.github.com/en/rest/git/trees#get-a-tree
+ * @param {string} hook - the github repository
+ * @param {string} token - the github token
+ * @param {string} treeSHA - the tree SHA to retrieve
+ * @return {Promise<Array>} - the promise for the tree items
+ */
+async function getTreeRecursive(hook, token, treeSHA) {
+  return fetch(`https://api.github.com/repos/${hook}/git/trees/${treeSHA}?recursive=1`, {
+    method: 'GET',
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      return data.tree || [];
+    });
 }
