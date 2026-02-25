@@ -31,10 +31,10 @@ function markUploadedCSS(prUrl) {
   elem.className = 'markuploaded';
 
   // 클릭 시 전달받은 prUrl로 이동하도록 변경
-  elem.addEventListener("click", function() {
+  elem.addEventListener("click", function () {
     window.location.href = prUrl;
   });
-  
+
   elem.style.cursor = "pointer";
 }
 
@@ -56,7 +56,7 @@ function startUploadCountDown() {
     if (uploadState.uploading === true) {
       markUploadFailedCSS();
     }
-  }, 10000);
+  }, 30000);
 }
 
 /**
@@ -74,15 +74,15 @@ function compareSubmission(a, b) {
   // prettier-ignore-start
   /* eslint-disable */
   return hasNotSubtask(a.result, b.result)
-          ? a.runtime === b.runtime
-            ? a.memory === b.memory
-              ? a.codeLength === b.codeLength
-                ? -(a.submissionId - b.submissionId)
-                : a.codeLength - b.codeLength
-              : a.memory - b.memory
-            : a.runtime - b.runtime
-          : compareResult(a.result, b.result)
-  ;
+    ? a.runtime === b.runtime
+      ? a.memory === b.memory
+        ? a.codeLength === b.codeLength
+          ? -(a.submissionId - b.submissionId)
+          : a.codeLength - b.codeLength
+        : a.memory - b.memory
+      : a.runtime - b.runtime
+    : compareResult(a.result, b.result)
+    ;
   /* eslint-enable */
   // prettier-ignore-end
 }
@@ -159,7 +159,7 @@ function convertResultTableHeader(header) {
 }
 
 function convertImageTagAbsoluteURL(doc = document) {
-  if(isNull(doc)) return;
+  if (isNull(doc)) return;
   // img tag replace Relative URL to Absolute URL.
   Array.from(doc.getElementsByTagName('img'), (x) => {
     x.setAttribute('src', x.currentSrc);
@@ -173,7 +173,7 @@ function convertImageTagAbsoluteURL(doc = document) {
  * @param {Date} date
  * @return {string} 포맷된 스트링
  */
-function getDateString(date){
+function getDateString(date) {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
