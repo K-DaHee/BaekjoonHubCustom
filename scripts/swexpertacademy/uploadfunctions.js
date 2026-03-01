@@ -36,7 +36,21 @@ async function checkDuplicateInPR(bojData) {
     );
 
     const newCodeSHA = calculateBlobSHA(bojData.code);
-    const isDuplicate = existingFilesInDir.some(file => file.sha === newCodeSHA);
+    let isDuplicate = existingFilesInDir.some(file => file.sha === newCodeSHA);
+
+    // Java 파일의 경우 클래스명이 넘버링되어 변경될 수 있으므로 추가 비교
+    if (!isDuplicate) {
+      const ext = bojData.fileName.split('.').pop();
+      if (ext === 'java') {
+        isDuplicate = existingFilesInDir.some(file => {
+          const fileName = file.path.split('/').pop();
+          if (!fileName.endsWith('.java')) return false;
+          const className = fileName.replace('.java', '');
+          const renamedCode = bojData.code.replace(/public\s+class\s+([A-Za-z_][A-Za-z0-9_]*)/, `public class ${className}`);
+          return file.sha === calculateBlobSHA(renamedCode);
+        });
+      }
+    }
 
     if (isDuplicate) {
       return { isDuplicate: true, prUrl: existingPR.html_url };
