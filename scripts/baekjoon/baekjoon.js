@@ -48,7 +48,7 @@ function stopLoader() {
   loader = null;
 }
 
-function toastThenStopLoader(toastMessage, errorMessage){
+function toastThenStopLoader(toastMessage, errorMessage) {
   Toast.raiseToast(toastMessage)
   stopLoader()
   throw new Error(errorMessage)
@@ -59,6 +59,14 @@ async function beginUpload(bojData) {
   bojData = preProcessEmptyObj(bojData);
   log('bojData', bojData);
   if (isNotEmpty(bojData)) {
+
+    // PR 중복 체크를 prompt 전에 수행
+    const dupResult = await checkDuplicateInPR(bojData);
+    if (dupResult.isDuplicate) {
+      markUploadedCSS(dupResult.prUrl);
+      console.log('기존 PR에 이미 동일한 코드가 존재합니다. 업로드를 스킵합니다.');
+      return;
+    }
 
     // 접근 방법 입력받기
     const approachInput = prompt("어떻게 접근했나요?");
@@ -83,7 +91,7 @@ async function beginUpload(bojData) {
       difficultPoints = difficultInput.replace(/\.\s+/g, '.  \n');
     }
     bojData.prBody = bojData.prBody.replace('#어려웠던점#', difficultPoints);
-    
+
     // 배운 점 입력받기
     const learnedInput = prompt("무엇을 배웠나요?");
     let learnedPoints;

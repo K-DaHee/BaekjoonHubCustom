@@ -1,4 +1,55 @@
 /**
+ * prompt 표시 전에 기존 PR에 동일한 코드가 이미 있는지 확인
+ * @param {object} bojData - 문제 풀이와 관련된 데이터 객체
+ * @returns {Promise<{isDuplicate: boolean, prUrl?: string}>}
+ */
+async function checkDuplicateInPR(bojData) {
+  try {
+    const token = await getToken();
+    const hook = await getHook();
+    if (isNull(token) || isNull(hook)) {
+      return { isDuplicate: false };
+    }
+
+    const git = new GitHub(hook, token);
+    const stats = await getStats();
+    let baseBranch = stats.branches[hook] || await git.getDefaultBranchOnRepo();
+
+    // 커밋 메시지에서 플랫폼 정보 추출
+    const platform = bojData.message.substring(bojData.message.indexOf('/') + 1, bojData.message.indexOf(']'));
+    const branchName = `${platform}/problem-${bojData.fileName.replace(/[^0-9]/g, '')}`;
+
+    // 기존 열린 PR 확인
+    const owner = hook.split('/')[0];
+    const existingPR = await findExistingPR(git, owner, branchName);
+
+    if (!existingPR) {
+      return { isDuplicate: false };
+    }
+
+    // 기존 브랜치의 트리에서 동일 코드 확인
+    const { refSHA: branchHeadSHA } = await git.getReference(branchName);
+    const { treeSHA: branchTreeSHA } = await git.getCommit(branchHeadSHA);
+    const treeItems = await git.getTreeRecursive(branchTreeSHA);
+    const existingFilesInDir = treeItems.filter(item =>
+      item.path.startsWith(bojData.directory + '/') && item.type === 'blob'
+    );
+
+    const newCodeSHA = calculateBlobSHA(bojData.code);
+    const isDuplicate = existingFilesInDir.some(file => file.sha === newCodeSHA);
+
+    if (isDuplicate) {
+      return { isDuplicate: true, prUrl: existingPR.html_url };
+    }
+
+    return { isDuplicate: false };
+  } catch (e) {
+    console.log('PR 중복 체크 중 에러 (무시하고 계속 진행):', e);
+    return { isDuplicate: false };
+  }
+}
+
+/**
  * Github에 풀 리퀘스트 생성하여 문제 풀이 코드 업로드
  * - 기존 PR이 있으면 커밋 추가 + PR body append
  * - 동일 코드가 이미 PR에 있으면 스킵

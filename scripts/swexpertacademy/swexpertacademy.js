@@ -58,7 +58,15 @@ async function beginUpload(bojData) {
   log('bojData', bojData);
   startUpload();
   if (isNotEmpty(bojData)) {
-    
+
+    // PR 중복 체크를 prompt 전에 수행
+    const dupResult = await checkDuplicateInPR(bojData);
+    if (dupResult.isDuplicate) {
+      markUploadedCSS(dupResult.prUrl);
+      console.log('기존 PR에 이미 동일한 코드가 존재합니다. 업로드를 스킵합니다.');
+      return;
+    }
+
     /* prBody 입력 받은 값으로 교체 */
     // 사용자가 입력 취소하면 기본값('작성된 내용이 없습니다.')으로 변경
     // 프롬프트로 사용자에게 직접 알고리즘 유형 입력받기
@@ -72,7 +80,7 @@ async function beginUpload(bojData) {
       algorithm = algorithmInput;
     }
     bojData.prBody = bojData.prBody.replace('#알고리즘유형#', algorithm);
-    
+
     // 접근 방법 입력받기
     const approachInput = prompt("어떻게 접근했나요?");
     let approach;
@@ -96,7 +104,7 @@ async function beginUpload(bojData) {
       difficultPoints = difficultInput.replace(/\.\s+/g, '.  \n');
     }
     bojData.prBody = bojData.prBody.replace('#어려웠던점#', difficultPoints);
-    
+
     // 배운 점 입력받기
     const learnedInput = prompt("무엇을 배웠나요?");
     let learnedPoints;
