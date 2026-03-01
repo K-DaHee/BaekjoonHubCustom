@@ -34,7 +34,7 @@ function markUploadedCSS(uploadedUrl) {
               Object.keys(branches)[0] + "/tree/" + 
               branches[Object.keys(branches)[0]] + "/" + directory;
   */
-  elem.addEventListener("click", function() {
+  elem.addEventListener("click", function () {
     window.location.href = uploadedUrl;
   });
   elem.style.cursor = "pointer";
@@ -58,7 +58,7 @@ function startUploadCountDown() {
     if (uploadState.uploading === true) {
       markUploadFailedCSS();
     }
-  }, 10000);
+  }, 30000);
 }
 
 /**
@@ -68,7 +68,7 @@ function startUploadCountDown() {
  * @return {string} 포맷된 스트링
  */
 
-function getDateString(date){
+function getDateString(date) {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
