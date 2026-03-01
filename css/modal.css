@@ -1,0 +1,170 @@
+/* ============================================
+   BaekjoonHub Custom Modal
+   PR body 입력을 위한 커스텀 모달 스타일
+   ============================================ */
+
+/* 오버레이 */
+.bjh-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+/* 모달 카드 */
+.bjh-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 520px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 28px 32px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  animation: bjh-modal-fadein 0.2s ease-out;
+}
+
+@keyframes bjh-modal-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 모달 헤더 */
+.bjh-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 6px 0;
+}
+
+.bjh-modal-subtitle {
+  font-size: 13px;
+  color: #888;
+  margin: 0 0 20px 0;
+}
+
+/* 입력 필드 그룹 */
+.bjh-modal-field {
+  margin-bottom: 16px;
+}
+
+.bjh-modal-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.bjh-modal-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1.5px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  color: #333;
+  background: #fafafa;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.bjh-modal-textarea:focus {
+  outline: none;
+  border-color: #3e67ec;
+  box-shadow: 0 0 0 3px rgba(62, 103, 236, 0.15);
+  background: #fff;
+}
+
+.bjh-modal-textarea::placeholder {
+  color: #aaa;
+}
+
+/* 입력 필드 (한 줄) */
+.bjh-modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #333;
+  background: #fafafa;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.bjh-modal-input:focus {
+  outline: none;
+  border-color: #3e67ec;
+  box-shadow: 0 0 0 3px rgba(62, 103, 236, 0.15);
+  background: #fff;
+}
+
+.bjh-modal-input::placeholder {
+  color: #aaa;
+}
+
+/* 힌트 텍스트 */
+.bjh-modal-hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* 버튼 영역 */
+.bjh-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.bjh-modal-btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, transform 0.1s;
+}
+
+.bjh-modal-btn:active {
+  transform: scale(0.97);
+}
+
+.bjh-modal-btn-cancel {
+  background: #f0f0f0;
+  color: #555;
+}
+
+.bjh-modal-btn-cancel:hover {
+  background: #e0e0e0;
+}
+
+.bjh-modal-btn-submit {
+  background: #3e67ec;
+  color: #fff;
+}
+
+.bjh-modal-btn-submit:hover {
+  background: #2d52d4;
+}

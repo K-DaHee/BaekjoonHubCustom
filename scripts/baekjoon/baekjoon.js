@@ -68,41 +68,21 @@ async function beginUpload(bojData) {
       return;
     }
 
-    // 접근 방법 입력받기
-    const approachInput = prompt("어떻게 접근했나요?");
-    let approach;
-    if (approachInput === '-') {
-      approach = '';
-    } else if (approachInput === null || approachInput.trim() === '') {
-      approach = '작성된 내용이 없습니다.';
-    } else {
-      approach = approachInput.replace(/\.\s+/g, '.  \n');
-    }
-    bojData.prBody = bojData.prBody.replace('#접근방법#', approach);
+    // 커스텀 모달로 PR body 입력받기
+    const modalResult = await showPRBodyModal([
+      { id: 'approach', label: '🤔 접근 방법', type: 'textarea', placeholder: '어떻게 접근했나요?' },
+      { id: 'difficulty', label: '🤯 어려웠던 점', type: 'textarea', placeholder: '어떤 점이 어려웠나요?' },
+      { id: 'learned', label: '📚 배운 점', type: 'textarea', placeholder: '무엇을 배웠나요?' },
+    ]);
 
-    // 어려웠던 점 입력받기
-    const difficultInput = prompt("어떤 점이 어려웠나요?");
-    let difficultPoints;
-    if (difficultInput === '-') {
-      difficultPoints = '';
-    } else if (difficultInput === null || difficultInput.trim() === '') {
-      difficultPoints = '작성된 내용이 없습니다.';
-    } else {
-      difficultPoints = difficultInput.replace(/\.\s+/g, '.  \n');
+    if (modalResult === null) {
+      console.log('사용자가 입력을 취소했습니다.');
+      return;
     }
-    bojData.prBody = bojData.prBody.replace('#어려웠던점#', difficultPoints);
 
-    // 배운 점 입력받기
-    const learnedInput = prompt("무엇을 배웠나요?");
-    let learnedPoints;
-    if (learnedInput === '-') {
-      learnedPoints = '';
-    } else if (learnedInput === null || learnedInput.trim() === '') {
-      learnedPoints = '작성된 내용이 없습니다.';
-    } else {
-      learnedPoints = learnedInput.replace(/\.\s+/g, '.  \n');
-    }
-    bojData.prBody = bojData.prBody.replace('#배운점#', learnedPoints);
+    bojData.prBody = bojData.prBody.replace('#접근방법#', processModalInput(modalResult.approach));
+    bojData.prBody = bojData.prBody.replace('#어려웠던점#', processModalInput(modalResult.difficulty));
+    bojData.prBody = bojData.prBody.replace('#배운점#', processModalInput(modalResult.learned));
 
     const stats = await getStats();
     const hook = await getHook();

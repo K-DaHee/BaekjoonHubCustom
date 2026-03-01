@@ -72,7 +72,8 @@
         "https://www.acmicpc.net/*"
       ],
       "css": [
-        "css/baekjoon/inject.css"
+        "css/baekjoon/inject.css",
+        "css/modal.css"
       ],
       "js": [
         "library/sha1.min.js",
@@ -84,6 +85,7 @@
         "scripts/authorize.js",
         "scripts/storage.js",
         "scripts/enable.js",
+        "scripts/modal.js",
         "scripts/baekjoon/variables.js",
         "scripts/baekjoon/storage.js",
         "scripts/baekjoon/parsing.js",
@@ -98,7 +100,8 @@
         "https://school.programmers.co.kr/*"
       ],
       "css": [
-        "css/programmers/inject.css"
+        "css/programmers/inject.css",
+        "css/modal.css"
       ],
       "js": [
         "library/sha1.min.js",
@@ -107,6 +110,7 @@
         "scripts/authorize.js",
         "scripts/storage.js",
         "scripts/enable.js",
+        "scripts/modal.js",
         "scripts/programmers/variables.js",
         "scripts/programmers/util.js",
         "scripts/programmers/parsing.js",
@@ -120,7 +124,8 @@
         "https://swexpertacademy.com/*"
       ],
       "css": [
-        "css/swexpertacademy/inject.css"
+        "css/swexpertacademy/inject.css",
+        "css/modal.css"
       ],
       "js": [
         "library/sha1.min.js",
@@ -129,6 +134,7 @@
         "scripts/authorize.js",
         "scripts/storage.js",
         "scripts/enable.js",
+        "scripts/modal.js",
         "scripts/swexpertacademy/storage.js",
         "scripts/swexpertacademy/variables.js",
         "scripts/swexpertacademy/util.js",
