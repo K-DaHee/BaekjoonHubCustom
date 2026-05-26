@@ -11,25 +11,77 @@
   - readme : README.md에 작성할 내용
   - code : 소스코드 내용
 */
+
+function reconstructFillBlankCode(node) {
+  let result = '';
+  for (const child of node.childNodes) {
+    if (child.tagName === 'INPUT') {
+      result += child.value;
+    } else if (child.childNodes && child.childNodes.length > 0) {
+      result += reconstructFillBlankCode(child);
+    } else {
+      result += child.textContent;
+    }
+  }
+  return result;
+}
+
 async function parseData() {
-  const link = document.querySelector('head > meta[name$=url]').content.replace(/\?.*/g, '').trim();
-  const problemId = document.querySelector('div.main > div.lesson-content').getAttribute('data-lesson-id');
-  const level = document.querySelector('body > div.main > div.lesson-content').getAttribute("data-challenge-level")
-  const division = [...document.querySelector('ol.breadcrumb').childNodes]
-    .filter((x) => x.className !== 'active')
-    .map((x) => x.innerText)
-    // .filter((x) => !x.includes('코딩테스트'))
-    .map((x) => convertSingleCharToDoubleChar(x))
-    .reduce((a, b) => `${a}/${b}`);
-  const title = document.querySelector('.algorithm-title .challenge-title').textContent.replace(/\\n/g, '').trim();
-  const problem_description = document.querySelector('div.guide-section-description > div.markdown').innerHTML;
-  const language_extension = document.querySelector('div.editor > ul > li.nav-item > a').innerText.split('.')[1];
-  const code = document.querySelector('textarea#code').value;
+  // 문제 링크 추출
+  const urlMeta = document.querySelector('head > meta[name$=url]');
+  const link = urlMeta ? urlMeta.content.replace(/\?.*/g, '').trim() : window.location.href;
+
+  // 문제 정보 영역 추출 (구조 변경 대응을 위해 선택자 보강)
+  const lessonEl = document.querySelector('.lesson-content') || document.querySelector('[data-lesson-id]');
+  if (!lessonEl) return null;
+
+  const problemId = lessonEl.getAttribute('data-lesson-id');
+  const level = lessonEl.getAttribute("data-challenge-level");
+
+  // 알고리즘 분류 추출
+  const breadcrumbEl = document.querySelector('ol.breadcrumb');
+  const division = breadcrumbEl 
+    ? [...breadcrumbEl.childNodes]
+        .filter((x) => x.className !== 'active')
+        .map((x) => x.innerText)
+        .map((x) => convertSingleCharToDoubleChar(x))
+        .reduce((a, b) => `${a}/${b}`)
+    : "분류 없음";
+
+  // 제목 및 문제 설명 추출
+  const titleEl = document.querySelector('.challenge-title') || document.querySelector('.algorithm-title');
+  const title = titleEl ? titleEl.textContent.replace(/\\n/g, '').trim() : "제목 없음";
+
+  const descEl = document.querySelector('div.guide-section-description > div.markdown') || document.querySelector('#tour-problem-description');
+  const problem_description = descEl ? descEl.innerHTML : "설명 없음";
+
+  // 언어 확장자 추출
+  const langNavEl = document.querySelector('div.editor > ul > li.nav-item > a');
+  const language_extension = langNavEl ? langNavEl.innerText.split('.')[1] : 'txt';
+  
+  // 소스코드 추출 (에디터 및 빈칸 채우기 대응)
+  const codeTextarea = document.querySelector('textarea#code');
+  const codeMirrorEl = document.querySelector('.CodeMirror');
+  const fillBlankInputs = document.querySelectorAll('input[name^="input_code"]');
+  let code = '';
+  
+  if (codeMirrorEl && codeMirrorEl.CodeMirror) {
+    code = codeMirrorEl.CodeMirror.getValue();
+  } else if (codeTextarea) {
+    code = codeTextarea.value;
+  } else if (fillBlankInputs.length > 0) {
+    const pre = fillBlankInputs[0].closest('pre');
+    code = reconstructFillBlankCode(pre);
+  }
+
+  // 채점 결과 메시지 수집
   const result_message =
     [...document.querySelectorAll('#output .console-message')]
       .map((node) => node.textContent)
       .filter((text) => text.includes(':'))
       .reduce((cur, next) => (cur ? `${cur}<br/>${next}` : next), '') || 'Empty';
+
+  // 성능 정보(시간, 메모리) 추출
   const [runtime, memory] = [...document.querySelectorAll('td.result.passed')]
     .map((x) => x.innerText)
     .map((x) => x.replace(/[^., 0-9a-zA-Z]/g, '').trim())
@@ -38,13 +90,15 @@ async function parseData() {
     .map((x) => x.replace(/(?<=[0-9])(?=[A-Za-z])/, ' '));
 
   /*프로그래밍 언어별 폴더 정리 옵션을 위한 언어 값 가져오기*/
-  const language = document.querySelector('div#tour7 > button').textContent.trim();
+  const langBtn = document.querySelector('div#tour7 > button') || document.querySelector('.dropdown-toggle');
+  const language = langBtn ? langBtn.textContent.trim() : "Unknown";
 
+  // 가공 로직(makeData)으로 데이터 전달
   return makeData({ link, problemId, level, title, problem_description, division, language_extension, code, result_message, runtime, memory, language });
 }
 
 async function makeData(origin) {
-  const { problem_description, problemId, level, result_message, division, language_extension, title, runtime, memory, code, language } = origin;
+  const { link, problem_description, problemId, level, result_message, division, language_extension, title, runtime, memory, code, language } = origin;
   const directory = await getDirNameByOrgOption(`Programmers/src/PRO/Lv${level}`, language);
   const levelWithLv = `${level}`.includes('lv') ? level : `lv${level}`.replace('lv', 'level ');
 

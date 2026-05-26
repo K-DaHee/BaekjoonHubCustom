@@ -109,6 +109,10 @@
   background: #fafafa;
   box-sizing: border-box;
   transition: border-color 0.15s, box-shadow 0.15s;
+  pointer-events: all !important; /* 클릭 활성화 */
+    user-select: text !important;  /* 텍스트 입력 활성화 */
+    cursor: text !important;       /* 커서 모양 고정 */
+    z-index: 100000 !important;    /* 최상단 배치 */
 }
 
 .bjh-modal-input:focus {
