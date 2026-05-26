@@ -1,5 +1,5 @@
 /**
- * prompt 표시 전에 기존 PR에 동일한 코드가 이미 있는지 확인
+ * prompt 표시 전에 기존 PR(열린/닫힌 모두)에 동일한 코드가 이미 있는지 확인
  * @param {object} bojData - 문제 풀이와 관련된 데이터 객체
  * @returns {Promise<{isDuplicate: boolean, prUrl?: string}>}
  */
@@ -19,41 +19,49 @@ async function checkDuplicateInPR(bojData) {
     const platform = bojData.message.substring(bojData.message.indexOf('/') + 1, bojData.message.indexOf(']'));
     const branchName = `${platform}/problem-${bojData.fileName.replace(/[^0-9]/g, '')}`;
 
-    // 기존 열린 PR 확인
+    // 모든 PR (open + closed) 조회
     const owner = hook.split('/')[0];
-    const existingPR = await findExistingPR(git, owner, branchName);
-
-    if (!existingPR) {
+    const allPRs = await git.listPullRequests('all', `${owner}:${branchName}`);
+    if (!Array.isArray(allPRs) || allPRs.length === 0) {
       return { isDuplicate: false };
     }
 
-    // 기존 브랜치의 트리에서 동일 코드 확인
-    const { refSHA: branchHeadSHA } = await git.getReference(branchName);
-    const { treeSHA: branchTreeSHA } = await git.getCommit(branchHeadSHA);
-    const treeItems = await git.getTreeRecursive(branchTreeSHA);
-    const existingFilesInDir = treeItems.filter(item =>
-      item.path.startsWith(bojData.directory + '/') && item.type === 'blob'
-    );
-
     const newCodeSHA = calculateBlobSHA(bojData.code);
-    let isDuplicate = existingFilesInDir.some(file => file.sha === newCodeSHA);
 
-    // Java 파일의 경우 클래스명이 넘버링되어 변경될 수 있으므로 추가 비교
-    if (!isDuplicate) {
-      const ext = bojData.fileName.split('.').pop();
-      if (ext === 'java') {
-        isDuplicate = existingFilesInDir.some(file => {
-          const fileName = file.path.split('/').pop();
-          if (!fileName.endsWith('.java')) return false;
-          const className = fileName.replace('.java', '');
-          const renamedCode = bojData.code.replace(/public\s+class\s+([A-Za-z_][A-Za-z0-9_]*)/, `public class ${className}`);
-          return file.sha === calculateBlobSHA(renamedCode);
-        });
+    // 각 PR의 트리에서 동일 코드 확인
+    for (const pr of allPRs) {
+      try {
+        // 닫힌 PR은 브랜치가 삭제되었을 수 있으므로 pr.head.sha로 직접 접근
+        const headSHA = pr.head.sha;
+        const { treeSHA } = await git.getCommit(headSHA);
+        const treeItems = await git.getTreeRecursive(treeSHA);
+        const existingFilesInDir = treeItems.filter(item =>
+          item.path.startsWith(bojData.directory + '/') && item.type === 'blob'
+        );
+
+        // 원본 코드 SHA 비교
+        let isDuplicate = existingFilesInDir.some(file => file.sha === newCodeSHA);
+
+        // Java 파일의 경우 클래스명이 넘버링되어 변경될 수 있으므로 추가 비교
+        if (!isDuplicate) {
+          const ext = bojData.fileName.split('.').pop();
+          if (ext === 'java') {
+            isDuplicate = existingFilesInDir.some(file => {
+              const fileName = file.path.split('/').pop();
+              if (!fileName.endsWith('.java')) return false;
+              const className = fileName.replace('.java', '');
+              const renamedCode = bojData.code.replace(/public\s+class\s+([A-Za-z_][A-Za-z0-9_]*)/, `public class ${className}`);
+              return file.sha === calculateBlobSHA(renamedCode);
+            });
+          }
+        }
+
+        if (isDuplicate) {
+          return { isDuplicate: true, prUrl: pr.html_url };
+        }
+      } catch (e) {
+        console.log(`PR #${pr.number} 트리 조회 실패 (무시):`, e);
       }
-    }
-
-    if (isDuplicate) {
-      return { isDuplicate: true, prUrl: existingPR.html_url };
     }
 
     return { isDuplicate: false };
@@ -180,7 +188,7 @@ async function handleExistingPR(git, hook, token, existingPR, branchName, bojDat
 }
 
 /**
- * 새 PR 생성 (기존 로직)
+ * 새 PR 생성 - 닫힌 PR들의 파일도 고려하여 넘버링
  */
 async function handleNewPR(git, hook, token, baseBranch, branchName, bojData, cb) {
   const branchRef = `refs/heads/${branchName}`;
@@ -189,18 +197,63 @@ async function handleNewPR(git, hook, token, baseBranch, branchName, bojData, cb
   const { refSHA: baseBranchSHA } = await git.getReference(baseBranch);
   const { treeSHA: baseTreeSHA } = await git.getCommit(baseBranchSHA);
 
+  // 모든 PR (open + closed)에서 기존 파일 목록 수집
+  const owner = hook.split('/')[0];
+  let allExistingFiles = [];
+  try {
+    const allPRs = await git.listPullRequests('all', `${owner}:${branchName}`);
+    if (Array.isArray(allPRs)) {
+      for (const pr of allPRs) {
+        try {
+          const { treeSHA } = await git.getCommit(pr.head.sha);
+          const treeItems = await git.getTreeRecursive(treeSHA);
+          const filesInDir = treeItems.filter(item =>
+            item.path.startsWith(bojData.directory + '/') && item.type === 'blob'
+          );
+          allExistingFiles = allExistingFiles.concat(filesInDir);
+        } catch (e) {
+          console.log(`PR #${pr.number} 트리 조회 실패 (무시):`, e);
+        }
+      }
+    }
+  } catch (e) {
+    console.log('기존 PR 파일 목록 수집 중 에러 (무시):', e);
+  }
+
+  // 베이스 브랜치의 기존 파일도 확인 (머지된 파일 고려)
+  try {
+    const baseTreeItems = await git.getTreeRecursive(baseTreeSHA);
+    const baseFilesInDir = baseTreeItems.filter(item =>
+      item.path.startsWith(bojData.directory + '/') && item.type === 'blob'
+    );
+    allExistingFiles = allExistingFiles.concat(baseFilesInDir);
+  } catch (e) {
+    console.log('베이스 브랜치 파일 목록 조회 중 에러 (무시):', e);
+  }
+
+  // 파일명 넘버링 결정
+  const numberedFileName = getNextFileName(allExistingFiles, bojData.directory, bojData.fileName);
+
+  // Java 파일인 경우 클래스명도 넘버링된 파일명과 일치시키기
+  let finalCode = bojData.code;
+  const ext = numberedFileName.split('.').pop();
+  if (ext === 'java' && numberedFileName !== bojData.fileName) {
+    const newClassName = numberedFileName.replace(`.${ext}`, '');
+    finalCode = finalCode.replace(/public\s+class\s+([A-Za-z_][A-Za-z0-9_]*)/, `public class ${newClassName}`);
+  }
+
   // 새 브랜치 생성
   await git.createReference(branchRef, baseBranchSHA);
 
   // 파일 Blob 생성 및 새 Tree 생성
-  const source = await git.createBlob(bojData.code, `${bojData.directory}/${bojData.fileName}`);
+  const source = await git.createBlob(finalCode, `${bojData.directory}/${numberedFileName}`);
   const newTreeSHA = await git.createTree(baseTreeSHA, [source]);
 
   // 새 커밋 생성 및 브랜치 Head 업데이트
   const commitSHA = await git.createCommit(bojData.message, newTreeSHA, baseBranchSHA);
   await git.updateHead(branchRef, commitSHA);
 
-  console.log(`성공: '${branchName}' 브랜치에 커밋이 완료되었습니다.`);
+  console.log(`성공: '${branchName}' 브랜치에 커밋이 완료되었습니다. (파일: ${numberedFileName})`);
 
   // PR 생성
   const stats = await getStats();
