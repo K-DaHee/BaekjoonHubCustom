@@ -70,6 +70,19 @@ function showPRBodyModal(fields, title = '📝 풀이 기록') {
 
             input.id = `bjh-field-${field.id}`;
             input.placeholder = field.placeholder || '';
+
+            // 키보드 입력 이벤트가 외부로 전파되는 것을 차단
+            const stopPropagation = (e) => e.stopPropagation();
+            input.addEventListener('keydown', stopPropagation);
+            input.addEventListener('keyup', stopPropagation);
+            input.addEventListener('keypress', stopPropagation);
+
+            // 클릭 시 포커스 강제 및 전파 차단
+            input.addEventListener('click', (e) => {
+                e.stopPropagation();
+                input.focus();
+            });
+
             fieldDiv.appendChild(input);
 
             modal.appendChild(fieldDiv);

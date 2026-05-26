@@ -36,7 +36,11 @@ function stopLoader() {
 }
 
 function getSolvedResult() {
-  const result = document.querySelector('div.modal-header > h4');
+  const result = document.querySelector('h4.modal-title')
+    || document.querySelector('div.modal-header > h4')
+    || document.querySelector('#modal-dialog h4')
+    || document.querySelector('.modal-header h4')
+    || document.querySelector('[class*="modal"] h4');
   if (result) return result.innerText;
   return '';
 }
